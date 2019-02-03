@@ -1,8 +1,12 @@
 -- a quick hashing out of categorical structures in Haskell code
 
-{-# LANGUAGE PolyKinds, TypeOperators #-}
+{-# LANGUAGE PolyKinds, TypeOperators, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
+
+import Prelude hiding (Functor, fmap)
+import GHC.Exts (Constraint)
 
 -- categories.
 
@@ -27,6 +31,7 @@ instance Category Hask where
 
 -- functors.
 class (Category c, Category d) => Functor c d t where
+    -- fmap :: (a ~> b) c -> (t a ~> t b) d
     fmap :: c a b -> d (t a) (t b)
 
 -- functor laws:
@@ -51,3 +56,13 @@ instance Functor Hask Hask Maybe where
 type Endofunctor c t = Functor c c t
 
 -- composition of functors are functors.
+newtype FunctComp g f x = Comp { unC :: g (f x) }
+newtype Hom (c :: * -> Constraint) a b = Hom (a -> b)
+
+{-instance (Functor a b f, Functor b c g) => Functor a c (FunctComp g f) where
+    -- here k is in (x ~> y) a
+    -- want fmap :: (x ~> y) a -> (g f x ~> g f y) c
+    fmap k x = Comp $ fmapg k (fmapf k (unC x))
+        where
+            fmapf = fmap :: a x y -> b (f x) (f y)
+            fmapg = fmap :: b s t -> c (g s) (g t)-}
