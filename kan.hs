@@ -1,6 +1,8 @@
 -- All concepts are Kan extensions.
 
 {-# LANGUAGE ExistentialQuantification, RankNTypes #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 import Control.Monad.Identity
 
@@ -27,6 +29,16 @@ uncheck t = t id
 -- Note then that the yoneda embedding (forall b. (a -> b) -> f b) can be described by
 type Yoneda = Ran Identity
 -- this makes sense! the right Kan extension of a functor along the identity is itself!
+
+-- Lets relate right Kan extensions to adjunctions!
+class (Functor f, Functor g) => Adjoint f g | f -> g, g -> f where
+    -- we impose these functional dependencies because when one writes fmap, it is unclear
+    -- which functor it belongs to.
+    unit :: a -> g (f a)
+    counit :: f (g a) -> a
+    leftAdj :: (f a -> b) -> (a -> g b)
+    rightAdj :: (a -> g b) -> (f a -> b)
+
 
 
 
