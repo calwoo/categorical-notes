@@ -1,11 +1,13 @@
 -- a quick hashing out of categorical structures in Haskell code
 
-{-# LANGUAGE PolyKinds, TypeOperators, FlexibleInstances #-}
+{-# LANGUAGE PolyKinds, TypeOperators, FlexibleInstances, RankNTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ConstraintKinds, TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances, ScopedTypeVariables #-}
+{-# LANGUAGE AllowAmbiguousTypes, FlexibleContexts #-}
 
-import Prelude hiding (Functor, fmap)
+import Prelude hiding (Functor, fmap, (.), Monad, id)
 import GHC.Exts (Constraint)
 
 -- categories.
@@ -56,13 +58,95 @@ instance Functor Hask Hask Maybe where
 type Endofunctor c t = Functor c c t
 
 -- composition of functors are functors.
-newtype FunctComp g f x = Comp { unC :: g (f x) }
-newtype Hom (c :: * -> Constraint) a b = Hom (a -> b)
+newtype FunctComp g f x = Comp { unComp :: g (f x) }
+-- TODO: figure out why
 
-{-instance (Functor a b f, Functor b c g) => Functor a c (FunctComp g f) where
-    -- here k is in (x ~> y) a
-    -- want fmap :: (x ~> y) a -> (g f x ~> g f y) c
-    fmap k x = Comp $ fmapg k (fmapf k (unC x))
+{- instance (Functor a b f, Functor b c g) => Functor a c (FunctComp g f) where
+    fmap f = fmapg $ fmapf f
         where
             fmapf = fmap :: a x y -> b (f x) (f y)
-            fmapg = fmap :: b s t -> c (g s) (g t)-}
+            fmapg = fmap :: b s t -> c (g s) (g t)
+        -- annoyingly, this won't work, as we somehow have to wrap c (g f x) (g f y) into
+        -- c (Comp g (f x)) (Comp g (f y)) -}
+
+-- gotta do some hack to decouple the type parameters
+newtype Hom (c :: * -> Constraint) a b = Hom (a -> b) -- this is a wrapper for the codomain category
+
+test = Hom unComp
+
+instance (Functor a b f, Functor b c g, c ~ Hom k) => Functor a c (FunctComp g f) where
+    fmap f = (Hom Comp) . fmapg (fmapf f) . (Hom unComp)
+      where
+        fmapf = fmap :: a x y -> b (f x) (f y)
+        fmapg = fmap :: b s t -> c (g s) (g t)
+
+-- natural transformations.
+type Nat c f g = forall a. c (f a) (g a)
+type NatHask f g = forall a. (f a) -> (g a)
+
+-- example)
+headMay :: forall a. [a] -> Maybe a
+headMay [] = Nothing
+headMay (a:as) = Just a
+
+-- functor categories.
+newtype Fun f g a b = FNat (f a -> g b)
+
+-- endofunctors
+type End f = Fun f f
+instance Category (End f) where
+    id = FNat id
+    (FNat f) . (FNat g) = FNat (f . g)
+
+-- monads.
+class Endofunctor c t => Monad c t where
+    eta :: c a (t a)
+    mu :: c (t (t a)) (t a)
+
+(>>=) :: (Monad c t) => c a (t b) -> c (t a) (t b)
+(>>=) f = mu . fmap f
+
+return :: (Monad c t) => c a (t a)
+return = eta
+
+-- Kleisli category.
+-- every monad gives rise to a category, the kleisli category.
+
+newtype Kleisli c t a b = K (c a (t b))
+
+type (a :~> b) c t = Kleisli c t a b
+-- composition in a Kleisli category given by fish operator
+(<=<) :: (Monad c t) => c y (t z) -> c x (t y) -> c x (t z)
+f <=< g = mu . fmap f . g
+
+instance Monad c t => Category (Kleisli c t) where
+    id = K eta
+    (K f) . (K g) = K (f <=< g)
+
+-- example) Hask! Here, c = (->)
+
+newtype KleisliHask m a b = KHask (a -> m b)
+
+type (a ::~> b) m = KleisliHask m a b
+
+(<=<<) :: (Monad Hask m) => (b -> m c) -> (a -> m b) -> (a -> m c)
+f <=<< g = mu . fmap f . g
+
+instance Monad Hask m => Category (KleisliHask m) where
+    id = KHask eta
+    (KHask f) . (KHask g) = KHask (f <=<< g)
+
+-- in Hask, functors and monads are of the form
+
+{- 
+class Functor t where
+    fmap :: (a -> b) -> t a -> t b
+
+class Functor t => Monad t where
+    eta :: a -> t a
+    mu :: t (t a) -> t a
+
+(>>=) :: Monad t => t a -> (a -> t b) -> t b
+tx >>= f = join . fmap f tx
+-}
+
