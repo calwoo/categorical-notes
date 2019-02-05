@@ -3,6 +3,7 @@
 {-# LANGUAGE ExistentialQuantification, RankNTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 import Control.Monad.Identity
 
@@ -30,6 +31,7 @@ uncheck t = t id
 type Yoneda = Ran Identity
 -- this makes sense! the right Kan extension of a functor along the identity is itself!
 
+-- ADJUNCTIONS:
 -- Lets relate right Kan extensions to adjunctions!
 class (Functor f, Functor g) => Adjoint f g | f -> g, g -> f where
     -- we impose these functional dependencies because when one writes fmap, it is unclear
@@ -59,3 +61,47 @@ adjointToLan = Lan counit . Identity
 lanToAdjoint :: Adjoint f g => Lan f Identity a -> g a
 lanToAdjoint (Lan f v) = leftAdj f (runIdentity v)
 
+-- COLIMITS AND LIMITS:
+-- finally, we use Kan extensions to get limits and colimits in Hask
+
+-- we know that categorically, Kan extensions along the trivial functor gives our (co)limits
+
+data Trivial a = Trivial
+
+instance Functor Trivial where
+    fmap f _ = Trivial
+
+trivialize :: a -> Trivial b
+trivialize _ = Trivial
+
+-- a limit is a right Kan extension along the trivial functor
+
+type Lim = Ran Trivial
+
+-- so now we can say
+-- Lim f a = forall b. (a -> Trivial b) -> f b
+
+-- examples)
+    -- Lim Maybe a = Nothing
+    -- Lim [] a = []
+
+-- a colimit is a left Kan extension along the trivial functor
+
+type Colim = Lan Trivial
+
+-- so now we can say
+-- Colim f a = exists b. (Trivial b -> a, f b)
+
+-- CODENSITY MONAD:
+-- we can take the right Kan extension of a functor g along itself and get a monad!
+
+instance Monad (Ran g g) where
+    return x = Ran $ \k -> k x
+    m >>= k = Ran $ \s -> runRan m $ (\x -> runRan (k x) s)
+
+instance Applicative (Ran g g) where
+    pure = return
+    f <*> x = do
+        af <- f
+        ax <- x
+        return (af ax)
