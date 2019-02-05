@@ -39,9 +39,23 @@ class (Functor f, Functor g) => Adjoint f g | f -> g, g -> f where
     leftAdj :: (f a -> b) -> (a -> g b)
     rightAdj :: (a -> g b) -> (f a -> b)
 
+-- a fact of category theory is that if f g is an adjunction, then f can be given as the right kan
+-- extension of the identity along g
 
+adjointToRan :: Adjoint f g => f a -> Ran g Identity a
+adjointToRan x = Ran $ \k -> Identity $ rightAdj k $ x
+-- k :: a -> g b
+ranToAdjoint :: Adjoint f g => Ran g Identity a -> f a
+ranToAdjoint k = runIdentity $ runRan k unit
 
+-- similarly we get a natural isomorphism between g and Lan f Identity
+-- Here, dually, a left Kan extension is the colimit over the category of maps (g a -> b) of the h b.
 
+data Lan g h a = forall b. Lan (g b -> a) (h b)
 
+adjointToLan :: Adjoint f g => g a -> Lan f Identity a
+adjointToLan = Lan counit . Identity
 
--- Dually, a left Kan extension is the colimit over the category of maps (g a -> b) of the h b.
+lanToAdjoint :: Adjoint f g => Lan f Identity a -> g a
+lanToAdjoint (Lan f v) = leftAdj f (runIdentity v)
+
